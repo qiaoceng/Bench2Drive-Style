@@ -6,6 +6,9 @@ From NYCU ACM Lab | 李尹瑄、曾歆喬、黃襄香
 ## Introduction
 - We curated Bench2Drive-Style,  which extends the Bench2Drive Dataset with 3 driving-style labels (**aggressive / normal / conservative**) by developing a VLM based style annotation pipeline and verify the credibility with the StyleDrive dataset.
 - Then we trained StyleOrion by modifying the generative planner from ORION using conditional VAE to learn stylish driving policy from our Bench2Drive-Style.
+<p align="center">
+  <img src="assets/model_arch.png" alt="model_arch" width="600">
+</p>
 - Style-aware evaluation on the CARLA simulator would be further explored in the future.
 
 ## Repository structure
@@ -28,7 +31,7 @@ From NYCU ACM Lab | 李尹瑄、曾歆喬、黃襄香
 │                             marked with a [Bench2Drive-Style] banner)
 ├── scripts/                  download_bench2drive.sh, download_styledrive.sh,
 │                             label_bench2drive.sh, eval_styledrive.sh, train_vae_style.sh
-├── docs/                     see Documentation above
+├── docs/                     see Documentation below
 ├── data/                     not tracked; see docs/DataPreparation.md
 ├── third_party/              not tracked; Bench2DriveZoo checkout
 └── README.md                 this document!
@@ -56,11 +59,11 @@ pip install -v -e .
 pip install -r requirements.txt
 ```
 
-Install torch first: `requirements.txt` pins `torch==2.4.1+cu118`, which pip only finds on the PyTorch index. `requirements.txt` also pins `flash-attn==0.2.8`. `mmcv/models/utils/attention.py` imports the flash-attn v1 function `flash_attn_unpadded_kvpacked_func`. With flash-attn 2.x, swap the two import lines there, as its comment explains. The checkpoints this step needs are listed under [4. Policy fine-tuning](#4-policy-fine-tuning).
+Install torch first: `requirements.txt` pins `torch==2.4.1+cu118`, which pip only finds on the PyTorch index. `requirements.txt` also pins `flash-attn==0.2.8`. `mmcv/models/utils/attention.py` imports the flash-attn v1 function `flash_attn_unpadded_kvpacked_func`. With flash-attn 2.x, swap the two import lines there, as its comment explains. The checkpoints this step needs are listed under [Step 4. Policy fine-tuning](#step-4-policy-fine-tuning).
 
 
 
-## step 1. Data preparation
+## Step 1. Data preparation
 
 Nothing under `data/` is tracked. Details, and how to use another scene list or location, are in [docs/DataPreparation.md](docs/DataPreparation.md).
 
@@ -84,7 +87,7 @@ bash scripts/download_styledrive.sh   # ~130 GB, mostly camera images; re-run to
 
 It downloads the ground truth (`styletest.json`), the test scene filter (`styletest.yaml`), the OpenScene v1.1 test metadata and camera images, and the nuPlan maps into `data/StyleDrive/`.
 
-## step 2. Labeling Bench2Drive
+## Step 2. Labeling Bench2Drive
 
 ```bash
 bash scripts/label_bench2drive.sh     # RUN_TAG=<name> to name the run; CUDA_VISIBLE_DEVICES defaults to 0,1
@@ -101,7 +104,7 @@ The script runs these stages. Each can also be run on its own (`python -m style_
 
 By default inference uses 2 GPUs with tensor parallelism and a 65536-token context (`--tp 2 --max-model-len 65536`), the settings used for the results above. `run_vlm.py` resumes where it stopped: pass the same `--run-tag` again.
 
-## step 3. Validation on StyleDrive
+## Step 3. Validation on StyleDrive
 
 ```bash
 bash scripts/eval_styledrive.sh
@@ -113,9 +116,7 @@ It builds the same three kinds of VLM input for the 4049 test clips, runs the la
 - `confusion_matrix.png`, `label_distribution.png`;
 - `parsed_reasons_vllm.json`: the parsed answer for every clip.
 
-These are the numbers in [Results](#results).
-
-## step 4. Policy fine-tuning
+## Step 4. Policy fine-tuning
 
 Before the first run, put the checkpoints under `StyleOrion/ckpts/`:
 
