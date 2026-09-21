@@ -1,0 +1,245 @@
+=== 1. GRAPHIC & DATA CONTEXT ===
+You are provided with data representing a 5-second driving clip, sampled at 2Hz (10 frames in total, Frame 0 to Frame 9).
+• Visual Inputs: 6 Surround-View Images (CAM) and 1 BEV Trajectory Map.
+• Textual Inputs (Starts with "Driving context:"): Ego velocity, acceleration (ax,ay,az), yaw, Total displacement (meters), and Objects.
+• **Pre-computed Physics Extremes (Must be prioritized)**:
+  - Max ax: [Value] m/s² at Frame [X]
+  - Max Deceleration (Peak Braking): [Value] m/s² at Frame [X]
+  - Max |ay| (Peak Swerve): [Value] m/s² at Frame [X]
+*STRICT ADHERENCE: All reasoning must be based EXCLUSIVELY on provided data. Do not hallucinate.*
+
+=== 2. THE DRIVING STYLE SPECTRUM (VALUE TRADE-OFFS) ===
+Classify the style based on how the ego vehicle balances flow vs. safety. Use physics (ax, ay, displacement) as indicators of intent, not rigid triggers:
+
+• AGGRESSIVE (Prioritizes Speed/Progress over Safety)
+  - Intent: Reckless anticipation, closing gaps too rapidly, forcing emergency maneuvers due to inattention.
+  - Contextual Indicators: High-speed late braking OR late violent swerving for early-visible static hazards. The vehicle creates its own danger by maintaining speed too long, leading to violent physics.
+  - **Also includes: High-speed violent maneuvers (EXTREME swerve or brake: |ay| > 3.0 or decel < -8.0 m/s²) with no proportionate in-path threat visible — this indicates reckless inattention or aggressive gap-forcing in merge/cut-in scenarios where the threat may have briefly appeared or the gap was forced dangerously.**
+
+• NORMAL (Balances Progress and Safety)
+  - Intent: Smooth, predictable, and cooperative. Anticipates hazards appropriately and matches traffic density.
+  - Contextual Indicators: Compliance with traffic rules (Red Lights, Stop Signs, yielding at crosswalks) is strictly NORMAL regardless of braking magnitude. If a heavy brake occurs for a sudden threat (e.g., occluded pedestrian sprinting into lane, blind cut-in), it is justified NORMAL evasion. Low displacement/frequent stopping is perfectly NORMAL if justified by high-density traffic or red lights.
+
+• CONSERVATIVE (Prioritizes Absolute Safety over Progress)
+  - Intent: Timid yielding, over-anticipation, phantom braking, or disrupting the natural flow of traffic.
+  - Contextual Indicators: Heavy braking or swerving for objects staying safely outside the ego's path (sidewalk, shoulder, other lane with no movement toward ego). Stopping unnecessarily when the path is clear.
+  - **Speed Constraint: Conservative REQUIRES low/moderate speed context. High-speed violent maneuvers (|ay| > 3.0 or decel < -8.0 m/s²) at ego speed > 5 m/s are NOT conservative — they indicate aggressive inattention or reckless gap-forcing, even if no obvious obstacle appears in the final BEV frame.**
+
+=== 3. EVALUATION METHOD ===
+You must follow this 4-stage structure. Each stage builds on the previous one.
+
+**STAGE 0: SCENE DECOMPOSITION (Observe before you judge)**
+Before any classification, extract facts from each modality SEPARATELY. Do not make any judgment yet — just observe.
+
+[From Images Only — what do you SEE?]
+V1. Primary object/hazard: What is it? Where is it relative to ego (in-lane, adjacent lane, shoulder, sidewalk)?
+V2. Is it static or moving? If moving, in which direction relative to ego's path?
+V3. Traffic context: Other vehicles, traffic signals, road layout. Is traffic flowing or stopped?
+V4. Ego behavior visible in images: Is the ego changing lanes, maintaining lane, stopped?
+
+[From Telemetry Only — what do the NUMBERS say?]
+T1. Velocity trend: Is ego speeding up, cruising, or slowing down across frames?
+T2. Peak event: What is the strongest physics event (max decel or max |ay|)? At which frame?
+T3. Was ego moving fast before the peak event? (Check velocity at frames before the peak)
+T4. Displacement: How far did ego travel in 5 seconds? Does this match the traffic context?
+
+[From BEV Only — what does the SPATIAL layout confirm?]
+B1. Is the primary object in the ego's projected forward path? (Yes/No)
+B2. Does the object have a movement vector toward ego's path? ("Conflict Vector" → Yes, "Trajectory Stable" → No)
+
+[DATASET NOTE — Object Disappearance Artifacts]
+D1. Simulation objects may abruptly vanish between frames due to spawning/despawning artifacts — this is NOT the same as the vehicle driving away or turning off.
+D2. If an object was clearly in-path during frames 0–N and suddenly disappears at frame N+1 with no natural explanation (no turn, no lane exit, no occlusion), treat the disappearance as a simulation artifact, NOT as evidence the threat was never real.
+D3. The ego's reaction at frames N+1 to N+3 following such a disappearance is still causally valid for reaction-timing evaluation — treat the object as present for the purpose of hazard assessment.
+D4. Do NOT classify a response to a previously in-path object that vanishes mid-clip as "phantom braking." Apply this note before Stage 1.
+
+**STAGE 1: INITIAL EXPERT JUDGMENT**
+Now combine the observations into reasoning:
+
+A1. Hazard & Context: Using V1-V3 and B1-B2, identify the primary hazard and its path relevance.
+A2. Flow & Density: Traffic density and ego's pacing relative to others.
+A3. Reaction Timing: Using T1-T3, when did ego react? Was it timely or late relative to when the hazard became a real threat?
+    - Static in-path obstacle visible from Frame 0 → it is ALWAYS a threat from Frame 0.
+    - Object on sidewalk/shoulder → only becomes a threat IF it moves toward the road.
+    - Traffic signal → stopping at any point before the line is timely.
+A4. Physics Severity: EXTREME (decel < -8.0 or |ay| > 3.0), MODERATE (-8.0 to -3.0 or 1.5 to 3.0), or MILD.
+A5. Causal Match: Does the physics peak match the hazard? (timing, direction, magnitude all consistent?)
+A6. Intent Synthesis: Combine all above — what was the driver's intent?
+A7. Verdict with reasoning.
+
+Initial Label: <conservative | normal | aggressive>
+Initial Confidence: <0-1>
+
+**STAGE 2: ALTERNATIVE INTERPRETATIONS (Think again)**
+Before finalizing, consider TWO alternative readings of the same scene:
+
+Path A — "What if this is actually [the next most likely label]?"
+  - What evidence supports this alternative? What would have to be true?
+  - Does this interpretation better explain the observations from Stage 0?
+
+Path B — "What is the strongest argument AGAINST my initial label?"
+  - What did I possibly overlook or assume?
+  - Did I correctly identify which object caused the telemetry peak?
+  - Did I measure reaction timing from the right moment (when hazard became a REAL threat, not just first visible)?
+  - If labeling Conservative: Is ego speed high (> 5 m/s) at the moment of the peak event? If yes, reconsider — high-speed extreme physics are NOT conservative.
+
+Resolution: After considering both paths, which label best fits ALL the evidence?
+
+**STAGE 3: FINAL CALIBRATED JUDGMENT**
+Repeat A1-A7 with any corrections from Stage 2.
+
+Label: <conservative | normal | aggressive>
+Confidence: <0-1>
+Description: <1-2 sentence summary>
+
+=== 4. FEW-SHOT EXAMPLES ===
+
+Example 1: Aggressive (Late Panic Swerve — Maintained Speed Toward Visible Obstacle)
+
+STAGE 0: SCENE DECOMPOSITION
+[Images] V1: Static construction cones in ego's lane. V2: Static. V3: Low traffic, open road. V4: Ego maintains lane then swerves sharply near the end.
+[Telemetry] T1: Ego cruising at high speed through Frames 0-6, then sudden lateral spike. T2: Peak |ay| = 8.2 m/s² at Frame 7. T3: Yes — ego was fast before the swerve. T4: 40.1m displacement = high speed maintained.
+[BEV] B1: Yes, cones are in ego's projected path. B2: N/A (static).
+[Dataset Note] No object disappearance observed.
+
+STAGE 1: INITIAL EXPERT JUDGMENT
+A1. Static cones in ego's lane, visible from Frame 0. In-path confirmed by BEV.
+A2. Low density, open road — no traffic excuse for delay.
+A3. Cones are static and in-path from Frame 0 — they are ALWAYS a threat. Ego reacted at Frame 7. Latency = 7 frames (3.5 seconds of ignoring the hazard).
+A4. |ay| = 8.2 → EXTREME swerve. Decel = -3.5 → MODERATE brake.
+A5. Causal match: swerve direction matches cone avoidance. Timing is very late.
+A6. The ego maintained high speed toward a clearly visible obstacle for 3.5 seconds, then panicked. This is not caution — it is inattention.
+A7. Aggressive — late panic swerve due to reckless inattention.
+Initial Label: aggressive
+Initial Confidence: 0.94
+
+STAGE 2: ALTERNATIVE INTERPRETATIONS
+Path A — "What if Conservative?" Conservative means over-reacting to something NOT in the ego's path. But BEV confirms the cones ARE in-path. You cannot be "too cautious" about something you're about to hit. Not conservative.
+Path B — "What if the swerve was a smooth lane change?" No — 8.2 m/s² lateral acceleration is violent, not smooth. And the ego maintained speed for 7 frames before reacting. A smooth driver would have adjusted early.
+Resolution: Aggressive confirmed. In-path obstacle + high speed maintained + late violent swerve = reckless.
+
+STAGE 3: FINAL CALIBRATED JUDGMENT
+A1. Static cones, in ego's lane from Frame 0. A2. Low density. A3. Latency = 7 frames. A4. EXTREME swerve. A5. Valid causal match. A6. Inattention, not caution. A7. Aggressive.
+Label: aggressive
+Confidence: 0.95
+Description: Dangerous late panic swerve around in-path static cones — ego maintained high speed for 3.5 seconds before a violent last-second dodge, proving reckless inattention.
+
+Example 2: Normal (Justified Emergency — Sudden Pedestrian Intrusion)
+
+STAGE 0: SCENE DECOMPOSITION
+[Images] V1: Pedestrian on sidewalk in early frames. V2: Pedestrian suddenly moves into road around Frame 6. V3: Medium traffic. V4: Ego brakes hard near end of clip.
+[Telemetry] T1: Cruising steadily, then sharp deceleration. T2: Peak decel = -14.8 m/s² at Frame 7. T3: Moderate speed before braking. T4: 28.5m displacement.
+[BEV] B1: Pedestrian enters ego's path at Frame 6. B2: Conflict Vector starts at Frame 6.
+[Dataset Note] No object disappearance observed.
+
+STAGE 1: INITIAL EXPERT JUDGMENT
+A1. Pedestrian on sidewalk Frames 0-5, sprints into road at Frame 6.
+A2. Medium density.
+A3. Pedestrian was NOT a threat until Frame 6 (sidewalk, no intent to cross). Ego braked at Frame 7. True latency = 1 frame. Immediate response.
+A4. Decel = -14.8 → EXTREME brake. Justified by sudden proximity.
+A5. Perfect causal match — pedestrian enters path, ego brakes immediately.
+A6. Prioritized safety during a genuine emergency. Excellent reaction.
+A7. Normal — justified emergency response.
+Initial Label: normal
+Initial Confidence: 0.92
+
+STAGE 2: ALTERNATIVE INTERPRETATIONS
+Path A — "What if Aggressive? The pedestrian was visible from Frame 0." The pedestrian was on the sidewalk with no intent to cross. You don't brake for every pedestrian you can see — only when they become a threat. The threat started at Frame 6, and ego reacted in 1 frame.
+Path B — "Did I pick the right threat timing?" Yes — BEV shows pedestrian's trajectory was stable on sidewalk until Frame 6.
+Resolution: Normal confirmed. Sudden threat + immediate reaction = justified emergency.
+
+STAGE 3: FINAL CALIBRATED JUDGMENT
+A1. Pedestrian sprinted into lane at Frame 6. A2. Medium density. A3. True latency = 1 frame. A4. EXTREME brake (justified). A5. Valid causal match. A6. Defensive safety. A7. Normal.
+Label: normal
+Confidence: 0.94
+Description: Justified emergency stop in response to a sudden pedestrian intrusion into the ego lane, with 1-frame reaction time showing excellent responsiveness.
+
+Example 3: Conservative (Phantom Braking — No Real Threat)
+
+STAGE 0: SCENE DECOMPOSITION
+[Images] V1: Parked car on far right shoulder. V2: Static — no lights, no movement. V3: Low traffic, clear road ahead. V4: Ego appears to slow down significantly.
+[Telemetry] T1: Moderate speed, then sudden deceleration. T2: Peak decel = -9.5 m/s² at Frame 4. T3: Was moving normally before braking. T4: 11.2m = very low displacement for 5 seconds.
+[BEV] B1: No — parked car is outside ego's lane on the shoulder. B2: Trajectory Stable — no movement vector toward ego.
+[Dataset Note] No object disappearance observed.
+
+STAGE 1: INITIAL EXPERT JUDGMENT
+A1. Parked car on shoulder. Not in ego's path. Trajectory Stable.
+A2. Low density, clear road.
+A3. No threat exists — the car is parked and off-path. There is no valid "reaction timing" because there is nothing to react to. This is a phantom response.
+A4. Decel = -9.5 → EXTREME brake. For nothing.
+A5. No causal match — the only nearby object is not a threat.
+A6. Excessive caution for a non-existent danger, disrupting normal flow.
+A7. Conservative — phantom braking.
+Initial Label: conservative
+Initial Confidence: 0.90
+
+STAGE 2: ALTERNATIVE INTERPRETATIONS
+Path A — "What if Aggressive? Maybe the driver was going too fast and braked late for something." But there IS nothing in-path to brake for. Aggressive requires a real threat that was handled recklessly.
+Path B — "Could the parked car have been about to move?" No evidence — no lights, no movement, fully parked on shoulder. BEV confirms Trajectory Stable.
+Resolution: Conservative confirmed. Extreme physics + no in-path threat = phantom reaction. Note: ego speed before braking was moderate, so the Speed Constraint does NOT redirect this to Aggressive — the speed was not high enough to invoke that rule.
+
+STAGE 3: FINAL CALIBRATED JUDGMENT
+A1. Parked car, shoulder, off-path. A2. Low density, clear. A3. Phantom — no real threat. A4. EXTREME brake (unjustified). A5. No causal match. A6. Phantom fear disrupting flow. A7. Conservative.
+Label: conservative
+Confidence: 0.92
+Description: Ego performed a heavy, unjustified phantom brake for a parked vehicle on the shoulder that posed no threat — classic over-cautious behavior disrupting traffic flow.
+
+Example 4: Aggressive (High-Speed Violent Maneuver — Object Disappeared Mid-Clip)
+
+STAGE 0: SCENE DECOMPOSITION
+[Images] V1: Merging vehicle visible in adjacent lane in Frames 0-4, cutting into ego's lane. V2: Moving — merging toward ego's path. V3: Highway, fast traffic. V4: Ego appears to brake and swerve near Frame 5.
+[Telemetry] T1: High speed (18 m/s), sustained through Frame 4. T2: Peak decel = -10.2 m/s² at Frame 5, |ay| = 3.8 m/s² at Frame 5. T3: Yes — ego was at 18 m/s before the event. T4: 52m displacement = high sustained speed.
+[BEV] B1: In Frame 4 BEV, the merging vehicle is in ego's projected path. By Frame 5 BEV the vehicle has vanished. B2: Conflict Vector in Frames 0-4; disappeared at Frame 5.
+[Dataset Note] D1-D2 apply: merging vehicle was clearly in-path Frames 0-4 and vanished abruptly at Frame 5 — treat as simulation despawn artifact. D3: Ego's reaction at Frame 5 is causally valid. D4: Do NOT classify as phantom braking.
+
+STAGE 1: INITIAL EXPERT JUDGMENT
+A1. Merging cut-in vehicle, in-path Frames 0-4. Object disappeared at Frame 5 due to simulation artifact — treated as real for reaction timing.
+A2. High-density highway.
+A3. Merging vehicle was a threat from Frame 2 (when it entered ego's lane). Ego reacted at Frame 5 — latency = 3 frames (1.5 seconds of closing at 18 m/s).
+A4. Decel -10.2 → EXTREME. |ay| 3.8 → EXTREME.
+A5. Timing and direction match the cut-in. The disappearance at Frame 5 is an artifact, not evidence of absence.
+A6. Ego maintained high speed while a vehicle merged into its path for 1.5 seconds, then responded with extreme combined braking and swerving. Late reaction at high speed.
+A7. Aggressive — delayed reaction to a cut-in at high speed forced an extreme combined maneuver.
+Initial Label: aggressive
+Initial Confidence: 0.88
+
+STAGE 2: ALTERNATIVE INTERPRETATIONS
+Path A — "What if Normal? The cut-in was sudden." The cut-in was visible for 3 frames before ego reacted. At 18 m/s, 1.5 seconds of delay on a visible threat is not immediate response.
+Path B — "What if Conservative? No threat in final BEV." The Speed Constraint prevents this: ego was at 18 m/s and physics were EXTREME. High-speed extreme maneuvers are NOT conservative. The disappearance is a dataset artifact per D1-D3.
+Resolution: Aggressive confirmed. High speed + 3-frame delay on visible threat + EXTREME physics = aggressive.
+
+STAGE 3: FINAL CALIBRATED JUDGMENT
+A1. Cut-in vehicle, in-path Frames 0-4 (despawn artifact at Frame 5). A2. Dense highway. A3. Latency = 3 frames at 18 m/s. A4. EXTREME combined. A5. Valid causal match (artifact-corrected). A6. Reckless speed maintenance during merge. A7. Aggressive.
+Label: aggressive
+Confidence: 0.88
+Description: Ego maintained highway speed for 1.5 seconds while a vehicle cut into its lane, triggering extreme combined braking and swerving — the final BEV disappearance is a simulation artifact, not evidence of a phantom reaction.
+
+=== 5. RESPONSE FORMAT (MANDATORY) ===
+
+### STAGE 0: SCENE DECOMPOSITION ###
+[Images] V1: V2: V3: V4:
+[Telemetry] T1: T2: T3: T4:
+[BEV] B1: B2:
+[Dataset Note] D1-D4 (if object disappearance detected, apply; otherwise state "No disappearance artifact observed"):
+
+### STAGE 1: INITIAL EXPERT JUDGMENT ###
+A1. Hazard & Context:
+A2. Flow & Density:
+A3. Reaction Timing:
+A4. Physics Severity:
+A5. Causal Match:
+A6. Intent Synthesis:
+A7. Verdict:
+Initial Label: <conservative | normal | aggressive>
+Initial Confidence: <0-1>
+
+### STAGE 2: ALTERNATIVE INTERPRETATIONS ###
+Path A — "What if [alternative label]?"
+Path B — "Strongest argument against my initial label?"
+Resolution:
+
+### STAGE 3: FINAL CALIBRATED JUDGMENT ###
+A1-A7: [Corrected reasoning]
+Label: <conservative | normal | aggressive>
+Confidence: <0-1>
+Description: <1-2 sentence summary>

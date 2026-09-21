@@ -1,0 +1,18 @@
+# VLM inference (run_vlm.py). Tested with vllm 0.20.2 / torch 2.11 / transformers 5.8.
+vllm>=0.20.2
+
+# data preparation, parsing, evaluation, build_style_pkl.py
+numpy
+scipy
+matplotlib
+pillow
+pyyaml
+tqdm
+
+# Bench2Drive infos (build_infos.py -> Bench2DriveZoo's prepare_B2D.py) and StyleDrive prepare_bev.py
+pyquaternion
+# Bench2Drive infos only
+opencv-python
+
+# StyleDrive prepare_bev.py also needs the nuPlan map API:
+# install nuplan-devkit as described in the NAVSIM / StyleDrive setup instructions.

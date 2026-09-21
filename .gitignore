@@ -1,0 +1,39 @@
+/data/
+/third_party/
+
+__pycache__/
+*.pyc
+nohup.out
+*.log
+
+# --- StyleOrion (rules inherited from the ORION repo it was copied from) ---
+# datasets, generated infos and VLM style outputs
+/StyleOrion/data/bench2drive/
+/StyleOrion/data/chat-B2D/
+/StyleOrion/data/infos/
+/StyleOrion/data/StyleClips/
+/StyleOrion/data/StyleClipsRemain/
+/StyleOrion/data/StyleResults/
+/StyleOrion/data/others/*
+!/StyleOrion/data/others/b2d_motion_anchor_infos_mode6.pkl
+!/StyleOrion/data/others/kmeans20_trajectories.pkl
+
+# checkpoints, training and evaluation outputs
+/StyleOrion/adzoo/orion/work_dirs/
+/StyleOrion/ckpts/
+/StyleOrion/build/
+/StyleOrion/test/
+/StyleOrion/INFO
+/StyleOrion/assets/
+/StyleOrion/Accident_Town03_Route101_Weather23/
+
+# compiled extensions and packaging artifacts
+*.so
+*.o
+*.pyd
+*.egg-info/
+*.egg
+
+# backup files
+*.bak
+*.bak_*
