@@ -5,10 +5,12 @@ From NYCU ACM Lab | 李尹瑄、曾歆喬、黃襄香
 
 ## Introduction
 - We curated Bench2Drive-Style,  which extends the Bench2Drive Dataset with 3 driving-style labels (**aggressive / normal / conservative**) by developing a VLM based style annotation pipeline and verify the credibility with the StyleDrive dataset.
+
+    ![pipeline](assets/pipeline.png)
 - Then we trained StyleOrion by modifying the generative planner from ORION using conditional VAE to learn stylish driving policy from our Bench2Drive-Style.
-<p align="center">
-  <img src="assets/model_arch.png" alt="model_arch" width="600">
-</p>
+
+    ![model_arch](assets/model_arch.png)
+
 - Style-aware evaluation on the CARLA simulator would be further explored in the future.
 
 ## Repository structure
