@@ -1,7 +1,13 @@
-# Bench2Drive-Style
+<h1 align="center">
+  Bench2Drive-Style<br>
+  <sub><i>Toward Style-Aware Closed-Loop End-to-End Autonomous Driving</i></sub>
+</h1>
 
-NYCU CS Project | 2025.09-Present \
-From NYCU ACM Lab | 李尹瑄、曾歆喬、黃襄香
+<p align="center">
+  李尹瑄<sup>*</sup> &nbsp;&nbsp; 曾歆喬<sup>*</sup> &nbsp;&nbsp; 黃襄香<sup>*</sup><br>
+  NYCU ACM Lab &nbsp;|&nbsp; NYCU CS Project, 2025.09 – Present<br>
+  <sub><sup>*</sup>Equal contribution</sub>
+</p>
 
 ## Introduction
 - We curated Bench2Drive-Style,  which extends the Bench2Drive Dataset with 3 driving-style labels (**aggressive / normal / conservative**) by developing a VLM based style annotation pipeline and verify the credibility with the StyleDrive dataset.
