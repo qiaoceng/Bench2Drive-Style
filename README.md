@@ -9,6 +9,8 @@
   <sub><sup>*</sup>Equal contribution</sub>
 </p>
 
+![Demo](assets/2286_HighwayCutIn_styles.gif)
+
 ## Introduction
 - We curated Bench2Drive-Style,  which extends the Bench2Drive Dataset with 3 driving-style labels (**aggressive / normal / conservative**) by developing a VLM based style annotation pipeline and verify the credibility with the StyleDrive dataset.
 
